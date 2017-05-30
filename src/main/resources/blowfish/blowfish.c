@@ -231,26 +231,26 @@ void decryptECB(const char * inFileName, const char * outFileName) {
 
 char * removePadding(char * buffer) {
     // check if last char represent padding
-    if (buffer[BLOCK_SIZE-1] >= 1 && buffer[BLOCK_SIZE-1] <= 8) {
-        printf("Padding value of last block: %02x\n" , buffer[BLOCK_SIZE-1]);
-        char * block;
-        int size = BLOCK_SIZE - buffer[BLOCK_SIZE-1];
-
-        // blocksize - padding value
-        block = malloc(size * sizeof(char));
-        printf("Size of block after padding removal: %i\n" , size);
-
-        printf("Hex representation of last block: ");
-        int i;
-        for (i = 0; i < size; i++) {
-            block[i] = buffer[i];
-            printf("%02x ", (unsigned char) block[i]);
-        }
-        printf("\n");
-
-        return block;
+    if (!(buffer[BLOCK_SIZE-1] >= 1 && buffer[BLOCK_SIZE-1] <= 8)) {
+        printf("No padding\n");
+        return (char *) buffer;
     }
+    
+    printf("Padding value of last block: %02x\n" , buffer[BLOCK_SIZE-1]);
+    char * block;
+    int size = BLOCK_SIZE - buffer[BLOCK_SIZE-1];
 
-    printf("No padding\n");
-    return (char *) buffer;
+    // last block = blocksize - padding value
+    block = malloc(size * sizeof(char));
+    printf("Size of block after padding removal: %i\n" , size);
+
+    printf("Hex representation of last block: ");
+    int i;
+    for (i = 0; i < size; i++) {
+        block[i] = buffer[i];
+        printf("%02x ", (unsigned char) block[i]);
+    }
+    printf("\n");
+    
+    return block;
 }
