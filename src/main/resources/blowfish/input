@@ -212,7 +212,7 @@ char * removePadding(char * buffer) {
         printf("No padding\n");
         return (char *) buffer;
     }
-    
+
     printf("Padding value of last block: %02x\n" , buffer[BLOCK_SIZE-1]);
     char * block;
     int size = BLOCK_SIZE - buffer[BLOCK_SIZE-1];
@@ -228,7 +228,7 @@ char * removePadding(char * buffer) {
         printf("%02x ", (unsigned char) block[i]);
     }
     printf("\n");
-    
+
     return block;
 }
 
@@ -240,37 +240,37 @@ void encryptCBC(const char * inFileName, const char * outFileName) {
     unsigned char outBuffer[BLOCK_SIZE];
     int readBytes;
     char ivec[BLOCK_SIZE];
-    
+
     if ((inFile = fopen(inFileName, "r")) == NULL) {
         printf("Open file error occurred");
         exit(1);
     }
-    
+
     if ((outFile = fopen(outFileName, "w")) == NULL) {
         printf("Open file error occurred");
         exit(1);
     }
-    
+
     // init initialization vector
     strncpy(ivec, IV, 8);
-    
+
     // set key before encryption
     BF_set_key(&key, strlen(MY_KEY), MY_KEY);
-    
+
     while (1) {
         // reset buffer
         memset(inBuffer, 0, BLOCK_SIZE);
-        
+
         // read 8 bytes of data in each loop
         if ((readBytes = fread(inBuffer, 1, BLOCK_SIZE, inFile)) == -1) {
             printf("Read error occurred");
         }
-        
+
         // end of file
         if (readBytes == 0) {
             break;
         }
-        
+
         // apply padding if needed
         if (readBytes < BLOCK_SIZE) {
             printf("Number of bytes read (last block): %i", readBytes);
@@ -285,13 +285,13 @@ void encryptCBC(const char * inFileName, const char * outFileName) {
 
         // do encryption
         BF_cbc_encrypt(inBuffer, outBuffer, BLOCK_SIZE, &key, ivec, BF_ENCRYPT);
-        
+
         printHex(readBytes, outBuffer);
-        
+
         // save encrypted part of file
         fwrite(outBuffer, 1, BLOCK_SIZE, outFile);
     }
-    
+
     fclose(inFile);
     fclose(outFile);
 }
@@ -305,32 +305,32 @@ void decryptCBC(const char * inFileName, const char * outFileName) {
     int readBytes;
     int notFirstIteration = 0;
     char ivec[BLOCK_SIZE];
-    
+
     if ((inFile = fopen(inFileName, "r")) == NULL) {
         printf("Open file error occurred");
         exit(1);
     }
-    
+
     if ((outFile = fopen(outFileName, "w")) == NULL) {
         printf("Open file error occurred");
         exit(1);
     }
-    
+
     // init initialization vector
     strncpy(ivec, IV, 8);
-    
+
     // set key before encryption
     BF_set_key(&key, strlen(MY_KEY), MY_KEY);
-    
+
     while (1) {
         // reset buffer
         memset(inBuffer, 0, BLOCK_SIZE);
-        
+
         // read 8 bytes of data in each loop
         if ((readBytes = fread(inBuffer, 1, BLOCK_SIZE, inFile)) == -1) {
             printf("Read error occurred");
         }
-        
+
         // end of file
         if (readBytes == 0) {
             // save decrypted block from previous iteration
@@ -339,12 +339,12 @@ void decryptCBC(const char * inFileName, const char * outFileName) {
             fwrite(originalBlock, 1, strlen(originalBlock), outFile);
             break;
         }
-        
+
         if (notFirstIteration) {
             // save decrypted block from previous iteration
             fwrite(outBuffer, 1, BLOCK_SIZE, outFile);
         }
-        
+
         // do decryption
         BF_cbc_encrypt(inBuffer, outBuffer, BLOCK_SIZE, &key, ivec, BF_DECRYPT);
 
@@ -352,7 +352,7 @@ void decryptCBC(const char * inFileName, const char * outFileName) {
 
         notFirstIteration =1; // set the flag
     }
-    
+
     fclose(inFile);
     fclose(outFile);
 }
