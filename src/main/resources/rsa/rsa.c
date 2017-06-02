@@ -28,14 +28,17 @@ RSA * createRSA(const char * keyFile,int public);
  * ./rsa genkey 2048 private.pem public.pem
  * ./rsa encrypt public.pem input encrypted
  * ./rsa decrypt private.pem encrypted decrypted
+ *
+ * Random file generation: dd if=/dev/zero of=file128M  bs=128M  count=1
  */
 
 int main(int argc, char * argv[]) {
     // program arguments validation
     if (argv[1] == NULL || argv[2] == NULL || argv[3] == NULL || argv[4] == NULL) {
         printf("Upss, something is wrong, check your parameters!\n");
-        printf("Correct format for key generation: genkey privateKeyName publicKeyName\n");
-        printf("Correct format for encrytion: encrypt/decrypt inFileName outFileName\n");
+        printf("Correct format for key generation: genkey 2048 private.pem public.pem\n");
+        printf("Correct format for encryption: encrypt public.pem input encrypted\n");
+        printf("Correct format for decryption: decrypt private.pem encrypted decrypted\n");
         return 1;
     }
 
@@ -105,6 +108,8 @@ RSA * createRSA(const char * keyFile,int public) {
 
 void encrypt(const char * keyFile, const char * inFileName, const char * outFileName) {
     RSA * rsa = createRSA(keyFile, 1);
+    clock_t begin = clock();
+
     FILE * inFile;
     FILE * outFile;
     unsigned char * inBuffer = NULL;
@@ -155,10 +160,15 @@ void encrypt(const char * keyFile, const char * inFileName, const char * outFile
 
     free(inBuffer);
     free(outBuffer);
+
+    clock_t end = clock();
+    printf("Elapsed: %f seconds\n", (double)(end - begin) / CLOCKS_PER_SEC);
 }
 
 void decrypt(const char * keyFile, const char * inFileName, const char * outFileName) {
     RSA * rsa = createRSA(keyFile, 0);
+    clock_t begin = clock();
+
     FILE * inFile;
     FILE * outFile;
     unsigned char * inBuffer = NULL;
@@ -207,6 +217,9 @@ void decrypt(const char * keyFile, const char * inFileName, const char * outFile
 
     free(inBuffer);
     free(outBuffer);
+
+    clock_t end = clock();
+    printf("Elapsed: %f seconds\n", (double)(end - begin) / CLOCKS_PER_SEC);
 }
 
 int genkey(int keyLength, const char * privKey, const char * pubKey) {
