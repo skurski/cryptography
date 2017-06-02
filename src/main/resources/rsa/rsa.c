@@ -115,45 +115,82 @@ RSA * createRSA(unsigned char * key,int public)
     return rsa;
 }
 
-int genkey(const char * privKey, const char * pubKey) {
-    int bits = getKeyFromInput();
-    printf ("Choosen key length is: %i\n", bits);
-    int ret = 0;
-    RSA * r = NULL;
-    BIGNUM * bne = NULL;
-    BIO * bp_public = NULL;
-    BIO * bp_private = NULL;
-    unsigned long e = RSA_F4;
-
-    // 1. generate rsa key
-    bne = BN_new();
-    ret = BN_set_word(bne,e);
-    ret = 1;
-
-    r = RSA_new();
-    ret = RSA_generate_key_ex(r, bits, bne, NULL);
-
-    // 2. save public key
-    bp_public = BIO_new_file("public.pem", "w+");
-    ret = PEM_write_bio_RSAPublicKey(bp_public, r);
-
-    // 3. save private key
-    bp_private = BIO_new_file("private.pem", "w+");
-    ret = PEM_write_bio_RSAPrivateKey(bp_private, r, NULL, NULL, 0, NULL, NULL);
-
-    // 4. free 
-    BIO_free_all(bp_public);
-    BIO_free_all(bp_private);
-    RSA_free(r);
-    BN_free(bne);
-
-    return ret;
-}
-
 void encrypt(const char * inFileName, const char * outFileName) {
 
 }
 
 void decrypt(const char * inFileName, const char * outFileName) {
 
+}
+
+int genkey(const char * privKey, const char * pubKey) {
+    int keyLength = getKeyFromInput();
+    printf ("Choosen key length is: %i\n", keyLength);
+    int result = 0;
+    unsigned char buffer[1024];
+    RSA * rsa = NULL;
+    BIO * bio = NULL;
+    BIGNUM * bigNum = NULL;
+    FILE * privKeyFile;
+    FILE * pubKeyFile;
+ 
+    if ((privKeyFile = fopen(privKey, "wb")) == NULL) {
+        printf("Open file error occurred");
+        exit(1);
+    }
+    if ((pubKeyFile = fopen(pubKey, "wb")) == NULL) {
+        printf("Open file error occurred");
+        exit(1);
+    }
+ 
+    printf("Starting generating RSA key pair...");
+    
+    // RSA structure
+    rsa = RSA_new();
+    if (rsa == NULL) {
+        printf("Error during generation of RSA structure!");
+        exit(1);
+    }
+ 
+    // BIGNUM structure
+    bigNum = BN_new();
+    BN_set_word(bigNum, 17);
+ 
+    // generate key pair
+    if (RSA_generate_key_ex(rsa, keyLength, bigNum, NULL) == 0) {
+        printf("Error during generation of RSA key pair!");
+        RSA_free(rsa);
+        exit(1);
+    }
+ 
+    printf("Key pair generated successfully!\n");
+ 
+    // BIO for storing the key printed from RSA
+    bio = BIO_new(BIO_s_mem());
+    RSA_print(bio, rsa, 4);
+ 
+    // Print keys to terminal
+    memset(buffer, 0, 1024);
+    while (BIO_read(bio, buffer, 1024) > 0) {
+        printf("%s", buffer);
+        memset(buffer, 0, 1024);
+    }
+    
+    // Write keys to files
+    printf("Writing keys to files...");
+    result = PEM_write_RSA_PUBKEY(pubKeyFile, rsa);
+    if (result == 0) {
+        printf("Error occured when trying to store public key!");
+    }
+   // Be careful - writing private key without securing it with password!
+   result = PEM_write_RSAPrivateKey(privKeyFile, rsa, EVP_aes_128_cbc(), NULL, NULL, NULL, NULL);
+   if (result == 0) {
+       printf("Error occured when trying to store private key!");
+   }
+   // free resources
+   // BIO_free_all(pubKeyFile);
+   // BIO_free_all(privKeyFile);
+   RSA_free(rsa);
+   // BN_free(bigNum);
+   return ret;
 }
