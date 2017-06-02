@@ -84,13 +84,13 @@ int main(int argc, char * argv[]) {
 }
 
 int getKeyFromInput() {
-    unsigned char string [256];
-    printf ("Insert key length: ");
-    gets (string);
-    char * end;
-    long value;
-    value = strtol(string, &end, 10);
-    printf ("Choosen key length is: %ld\n",value);
+ char * keySizeInput;
+ printf("Enter key size: ");
+ scanf("%s", keySizeInput);
+ 
+ int keylen = 0;
+ sscanf(keySizeInput, "%d", &keylen);
+ return keylen;
 }
 
 RSA * createRSA(unsigned char * key,int public)
@@ -117,6 +117,7 @@ RSA * createRSA(unsigned char * key,int public)
 
 int genkey(const char * privKey, const char * pubKey) {
     int bits = getKeyFromInput();
+    printf ("Choosen key length is: %i\n", bits);
     int ret = 0;
     RSA * r = NULL;
     BIGNUM * bne = NULL;
