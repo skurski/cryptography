@@ -20,7 +20,6 @@ int genkey(int keyLength, const char * privKey, const char * pubKey);
 void encrypt(const char * keyFile, const char * inFileName, const char * outFileName);
 void decrypt(const char * keyFile, const char * inFileName, const char * outFileName);
 RSA * createRSA(const char * keyFile,int public);
-int pass_callback(char * buf, int size, int rwflag, void * u);
 
 /*
  * Key pair generation / Encryption / Decryption using RSA algorithm
@@ -40,7 +39,7 @@ int main(int argc, char * argv[]) {
         return 1;
     }
 
-    // Added for password callback in PEM_read_RSAPrivateKey
+    // Added for automatic password callback in PEM_read_RSAPrivateKey
     OpenSSL_add_all_algorithms();
 
     // choose correct mode for [key generation/encryption/decryption]
@@ -77,23 +76,6 @@ int main(int argc, char * argv[]) {
     }
 
     return 1;
-}
-
-int pass_callback(char * buf, int size, int rwflag, void * u) {
-    int len;
-    char *tmp;
-    /* We'd probably do something else if 'rwflag' is 1 */
-    printf("Enter pass phrase for \"%s\"\n", (char *) u);
-
-    /* get pass phrase, length 'len' into 'tmp' */
-    tmp = "hello";
-    len = strlen(tmp);
-
-    if (len <= 0) return 0;
-    /* if too long, truncate */
-    if (len > size) len = size;
-    memcpy(buf, tmp, len);
-    return len;
 }
 
 RSA * createRSA(const char * keyFile,int public) {
