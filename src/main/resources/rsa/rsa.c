@@ -6,6 +6,7 @@
 #include <openssl/conf.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
+#include <openssl/evp.h>
 
 #define GENKEY "genkey"
 #define GENKEY_MODE 1
