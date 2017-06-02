@@ -9,50 +9,41 @@
 #include <openssl/evp.h>
 
 #define GENKEY "genkey"
+#define ENCRYPT "encrypt"
+#define DECRYPT "decrypt"
+
 #define GENKEY_MODE 1
 #define ENCRYPT_MODE 2
 #define DECRYPT_MODE 3
 
-#define ENCRYPT "encrypt"
-#define DECRYPT "decrypt"
+int genkey(int keyLength, const char * privKey, const char * pubKey);
+void encrypt(const char * keyFile, const char * inFileName, const char * outFileName);
+void decrypt(const char * keyFile, const char * inFileName, const char * outFileName);
+RSA * createRSA(const char * keyFile,int public);
+int pass_callback(char * buf, int size, int rwflag, void * u);
 
-int genkey(const char * privKey, const char * pubKey);
-void encrypt(const char * inFileName, const char * outFileName);
-void decrypt(const char * inFileName, const char * outFileName);
-
-/* 
- * Encryption / Decryption using RSA algorithm
+/*
+ * Key pair generation / Encryption / Decryption using RSA algorithm
  * Compilation: gcc rsa.c -o rsa -lcrypto
  * Execution format:
- * ./rsa genkey privateKeyName publicKeyName
- * ./rsa encrypt/decrypt inFileName outFileName
+ * ./rsa genkey 2048 private.pem public.pem
+ * ./rsa encrypt public.pem input encrypted
+ * ./rsa decrypt private.pem encrypted decrypted
  */
- 
-int main(int argc, char * argv[]) {
-    // initializing testing values - to delete
-    argv[0] = "main";
-    // argv[1] = "encrypt";
-    // argv[1] = "decrypt";
-    argv[1] = "genkey";
-    argv[2] = "private";
-    // argv[2] = "outfile.txt";
-    argv[3] = "public";
-    // argv[3] = "decrypt.txt";
-    int k;
-    for (k=0; k<2; k++) {
-        printf("%s\n", argv[k]);
-    }
 
-    // end of testing initialization - to delete
+int main(int argc, char * argv[]) {
     // program arguments validation
-    if (argv[1] == NULL || argv[2] == NULL || argv[3] == NULL) {
+    if (argv[1] == NULL || argv[2] == NULL || argv[3] == NULL || argv[4] == NULL) {
         printf("Upss, something is wrong, check your parameters!\n");
         printf("Correct format for key generation: genkey privateKeyName publicKeyName\n");
         printf("Correct format for encrytion: encrypt/decrypt inFileName outFileName\n");
         return 1;
     }
 
-    // choose correct mode for key generation/encryption/decryption
+    // Added for password callback in PEM_read_RSAPrivateKey
+    OpenSSL_add_all_algorithms();
+
+    // choose correct mode for [key generation/encryption/decryption]
     int mode;
     if (strcmp(argv[1], GENKEY) == 0) {
         mode = GENKEY_MODE;
@@ -67,66 +58,176 @@ int main(int argc, char * argv[]) {
 
     if (mode == GENKEY_MODE) {
         printf("Start generating private and public key pair ...\n");
-        genkey(inFile, outFile);
+        int keyLength = 0;
+        sscanf(argv[2], "%d", &keyLength);
+        genkey(keyLength, inFile, outFile);
         return 0;
     }
+
+    char * keyFile = argv[2];
     if (mode == ENCRYPT_MODE) {
         printf("Start encrypting ...\n");
-        encrypt(inFile, outFile);
+        encrypt(keyFile, inFile, outFile);
         return 0;
     }
     if (mode == DECRYPT_MODE) {
         printf("Start decrypting ...\n");
-        decrypt(inFile, outFile);
+        decrypt(keyFile, inFile, outFile);
         return 0;
     }
 
-    return 0;
+    return 1;
 }
 
-int getKeyFromInput() {
- char * keySizeInput;
- printf("Enter key size: ");
- scanf("%s", keySizeInput);
- 
- int keylen = 0;
- sscanf(keySizeInput, "%d", &keylen);
- return keylen;
+int pass_callback(char * buf, int size, int rwflag, void * u) {
+    int len;
+    char *tmp;
+    /* We'd probably do something else if 'rwflag' is 1 */
+    printf("Enter pass phrase for \"%s\"\n", (char *) u);
+
+    /* get pass phrase, length 'len' into 'tmp' */
+    tmp = "hello";
+    len = strlen(tmp);
+
+    if (len <= 0) return 0;
+    /* if too long, truncate */
+    if (len > size) len = size;
+    memcpy(buf, tmp, len);
+    return len;
 }
 
-RSA * createRSA(unsigned char * key,int public)
-{
-    RSA *rsa= NULL;
-    BIO *keybio ;
-    keybio = BIO_new_mem_buf(key, -1);
-    if (keybio==NULL)
-    {
-        printf( "Failed to create key BIO");
-        return 0;
+RSA * createRSA(const char * keyFile,int public) {
+    FILE * fp;
+    if ((fp = fopen(keyFile, "rb")) == NULL) {
+        printf("Open key file error occurred!\n");
+        exit(1);
     }
-    if(public)
-    {
-        rsa = PEM_read_bio_RSA_PUBKEY(keybio, &rsa,NULL, NULL);
+
+    RSA * rsa = RSA_new();
+
+    if (public) {
+        printf("Reading public key...\n");
+        rsa = PEM_read_RSA_PUBKEY(fp, &rsa, NULL, NULL);
+    } else {
+        printf("Reading private key...\n");
+        rsa = PEM_read_RSAPrivateKey(fp, &rsa, 0, NULL);
     }
-    else
-    {
-        rsa = PEM_read_bio_RSAPrivateKey(keybio, &rsa,NULL, NULL);
+
+    if (rsa == NULL) {
+        printf("Error while reading key!\n");
+        exit(1);
     }
 
     return rsa;
 }
 
-void encrypt(const char * inFileName, const char * outFileName) {
+void encrypt(const char * keyFile, const char * inFileName, const char * outFileName) {
+    RSA * rsa = createRSA(keyFile, 1);
+    FILE * inFile;
+    FILE * outFile;
+    unsigned char * inBuffer = NULL;
+    unsigned char * outBuffer = NULL;
+    int padding = RSA_PKCS1_PADDING;
+    int writeSize = RSA_size(rsa);
+    // block read size must be less than RSA_size(rsa) - 11 for the PKCS #1 v1.5 padding
+    int readSize = writeSize - 11;
+    int readBytes = 0;
+    int encSize = 0;
 
+    inBuffer  = malloc(readSize * sizeof(char));
+    outBuffer = malloc(writeSize * sizeof(char));
+
+    if ((inFile = fopen(inFileName, "r")) == NULL) {
+        printf("Open file error occurred\n");
+        exit(1);
+    }
+    if ((outFile = fopen(outFileName, "w")) == NULL) {
+        printf("Open file error occurred\n");
+        exit(1);
+    }
+
+    while (1) {
+        memset(inBuffer, 0, readSize);
+        if ((readBytes = fread(inBuffer, 1, readSize, inFile)) == -1) {
+            printf("Read error occurred\n");
+            break;
+        }
+
+        memset(outBuffer, 0, writeSize);
+        encSize = RSA_public_encrypt(readBytes, inBuffer, outBuffer, rsa, padding);
+        if (encSize < 0) {
+            printf("Error while encrypting data block\n");
+            break;
+        }
+
+        if (fwrite(outBuffer, 1, encSize, outFile) == -1) {
+            printf("Error while writing encrypted data block\n");
+            break;
+        }
+
+        if (readBytes < readSize)
+            break; // exit
+    }
+
+    printf("DONE\n");
+
+    free(inBuffer);
+    free(outBuffer);
 }
 
-void decrypt(const char * inFileName, const char * outFileName) {
+void decrypt(const char * keyFile, const char * inFileName, const char * outFileName) {
+    RSA * rsa = createRSA(keyFile, 0);
+    FILE * inFile;
+    FILE * outFile;
+    unsigned char * inBuffer = NULL;
+    unsigned char * outBuffer = NULL;
+    int padding = RSA_PKCS1_PADDING;
+    int blockSize = RSA_size(rsa);
+    int readBytes = 0;
+    int decSize = 0;
 
+    inBuffer  = malloc(blockSize * sizeof(char));
+    outBuffer = malloc(blockSize * sizeof(char));
+
+    if ((inFile = fopen(inFileName, "r")) == NULL) {
+        printf("Open file error occurred\n");
+        exit(1);
+    }
+    if ((outFile = fopen(outFileName, "w")) == NULL) {
+        printf("Open file error occurred\n");
+        exit(1);
+    }
+
+    while (1) {
+        memset(inBuffer, 0, blockSize);
+        if ((readBytes = fread(inBuffer, 1, blockSize, inFile)) == -1) {
+            printf("Read error occurred\n");
+            break;
+        }
+
+        if (!readBytes)
+            break;
+
+        memset(outBuffer, 0, blockSize);
+        decSize = RSA_private_decrypt(blockSize, inBuffer, outBuffer, rsa, padding);
+        if (decSize < 0) {
+            printf("Error while decrypting data block\n");
+            break;
+        }
+
+        if (fwrite(outBuffer, 1, decSize, outFile) == -1) {
+            printf("Error while writing decrypted data block\n");
+            break;
+        }
+    }
+
+    printf("DONE\n");
+
+    free(inBuffer);
+    free(outBuffer);
 }
 
-int genkey(const char * privKey, const char * pubKey) {
-    int keyLength = getKeyFromInput();
-    printf ("Choosen key length is: %i\n", keyLength);
+int genkey(int keyLength, const char * privKey, const char * pubKey) {
     int result = 0;
     unsigned char buffer[1024];
     RSA * rsa = NULL;
@@ -134,64 +235,70 @@ int genkey(const char * privKey, const char * pubKey) {
     BIGNUM * bigNum = NULL;
     FILE * privKeyFile;
     FILE * pubKeyFile;
- 
+
     if ((privKeyFile = fopen(privKey, "wb")) == NULL) {
-        printf("Open file error occurred");
+        printf("Open file error occurred\n");
         exit(1);
     }
     if ((pubKeyFile = fopen(pubKey, "wb")) == NULL) {
-        printf("Open file error occurred");
+        printf("Open file error occurred\n");
         exit(1);
     }
- 
-    printf("Starting generating RSA key pair...");
-    
+
+    printf("Starting generating RSA key pair...\n");
+
     // RSA structure
     rsa = RSA_new();
     if (rsa == NULL) {
-        printf("Error during generation of RSA structure!");
+        printf("Error during generation of RSA structure!\n");
         exit(1);
     }
- 
+
     // BIGNUM structure
     bigNum = BN_new();
     BN_set_word(bigNum, 17);
- 
+
     // generate key pair
     if (RSA_generate_key_ex(rsa, keyLength, bigNum, NULL) == 0) {
-        printf("Error during generation of RSA key pair!");
+        printf("Error during generation of RSA key pair!\n");
         RSA_free(rsa);
         exit(1);
     }
- 
+
     printf("Key pair generated successfully!\n");
- 
+
     // BIO for storing the key printed from RSA
     bio = BIO_new(BIO_s_mem());
     RSA_print(bio, rsa, 4);
- 
+
     // Print keys to terminal
     memset(buffer, 0, 1024);
     while (BIO_read(bio, buffer, 1024) > 0) {
         printf("%s", buffer);
         memset(buffer, 0, 1024);
     }
-    
+
     // Write keys to files
-    printf("Writing keys to files...");
+    printf("Writing keys to files...\n");
     result = PEM_write_RSA_PUBKEY(pubKeyFile, rsa);
     if (result == 0) {
-        printf("Error occured when trying to store public key!");
+        printf("Error occured when trying to store public key!\n");
     }
-   // Be careful - writing private key without securing it with password!
-   result = PEM_write_RSAPrivateKey(privKeyFile, rsa, EVP_aes_128_cbc(), NULL, NULL, NULL, NULL);
-   if (result == 0) {
-       printf("Error occured when trying to store private key!");
-   }
-   // free resources
-   // BIO_free_all(pubKeyFile);
-   // BIO_free_all(privKeyFile);
-   RSA_free(rsa);
-   // BN_free(bigNum);
-   return ret;
+    // Writing private key - prompt for password
+    result = PEM_write_RSAPrivateKey(privKeyFile, rsa, EVP_aes_128_cbc(), NULL, 0, 0, NULL);
+    if (result == 0) {
+       printf("Error occured when trying to store private key!\n");
+    }
+
+    // free resources
+    // BIO_free_all(pubKeyFile);
+    // BIO_free_all(privKeyFile);
+    RSA_free(rsa);
+    BN_free(bigNum);
+
+    fclose(privKeyFile);
+    fclose(pubKeyFile);
+
+    return result;
 }
+
